@@ -52,6 +52,7 @@ create or replace trigger trg_fine_suspend_member after
 declare
    v_member_id    members.member_id%type;
    v_unpaid_total number;
+   v_old_status   members.member_status%type;
 begin
    select l.member_id
      into v_member_id
@@ -70,11 +71,28 @@ begin
       and f.paid_date is null;
 
    if v_unpaid_total >= 2000 then
-      update members
-         set
-         member_status = 'SUSPENDED'
-       where member_id = v_member_id
-         and member_status = 'ACTIVE';
+      select member_status
+        into v_old_status
+        from members
+       where member_id = v_member_id;
+      if v_old_status = 'ACTIVE' then
+         update members
+            set
+            member_status = 'SUSPENDED'
+          where member_id = v_member_id;
+         insert into member_status_history (
+            member_id,
+            old_status,
+            new_status,
+            change_reason
+         ) values
+            ( v_member_id,
+              v_old_status,
+              'SUSPENDED',
+              'Unpaid fines exceeded ₹2000 (total: ₹'
+              || v_unpaid_total
+              || ')' );
+      end if;
    end if;
 end;
 /
