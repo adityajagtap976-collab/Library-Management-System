@@ -45,3 +45,36 @@ begin
    end if;
 end;
 /
+
+create or replace trigger trg_fine_suspend_member after
+   insert on fines
+   for each row
+declare
+   v_member_id    members.member_id%type;
+   v_unpaid_total number;
+begin
+   select l.member_id
+     into v_member_id
+     from loans l
+    where l.loan_id = :new.loan_id;
+
+   select nvl(
+      sum(f.fine_amount),
+      0
+   )
+     into v_unpaid_total
+     from fines f
+     join loans l
+   on l.loan_id = f.loan_id
+    where l.member_id = v_member_id
+      and f.paid_date is null;
+
+   if v_unpaid_total >= 2000 then
+      update members
+         set
+         member_status = 'SUSPENDED'
+       where member_id = v_member_id
+         and member_status = 'ACTIVE';
+   end if;
+end;
+/
