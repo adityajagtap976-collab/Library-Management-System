@@ -45,7 +45,7 @@ create table book_copies (
    shelf_location varchar2(50),
    aquired_date   date default sysdate not null,
    constraint fk_copies_book foreign key ( book_id )
-      references book ( book_id ),
+      references books ( book_id ),
    constraint chk_copy_status
       check ( copy_status in ( 'AVAILABLE',
                                'ON_LOAN',
@@ -83,4 +83,21 @@ create table loans (
    constraint chk_loan_dates
       check ( return_date is null
           or return_date >= checkout_date )
+);
+
+create table fines (
+   fine_id     number(10) generated always as identity ( start with 1 increment by 1 ) primary key,
+   loan_id     number(10) not null,
+   fine_amount number(6,2) not null,
+   fine_reason varchar2(20 char) not null,
+   issued_date date default sysdate not null,
+   paid_date   date,
+   constraint fk_fine_loan foreign key ( loan_id )
+      references loans ( loan_id ),
+   constraint chk_fine_amount check ( fine_amount > 0 ),
+   constraint chk_fine_reason
+      check ( fine_reason in ( 'LATE_RETURN',
+                               'LOST',
+                               'DAMAGED' ) ),
+   constraint chk_fine_paid_date check ( paid_date >= issued_date )
 );
