@@ -8,7 +8,6 @@ insert into members (
    ( 'Alice',
      'Borrower',
      'alice@test.com' );
-
 insert into members (
    first_name,
    last_name,
@@ -17,6 +16,3 @@ insert into members (
    ( 'Bob',
      'Waiter',
      'bob@test.com' );
-
-select *
-  from members;

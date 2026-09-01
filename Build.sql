@@ -1,8 +1,3 @@
--- ============================================================
--- MASTER BUILD SCRIPT — Library Management System
--- Run from the project root. Assumes Tables/ and Triggers/ subfolders.
--- ============================================================
-
    SET DEFINE OFF;
 SET ECHO ON;
 SET FEEDBACK ON;
@@ -67,6 +62,8 @@ pro    -- reservations
 pro    -- member_status_history
 @@Tables/10_create_member_status_history.sql
 
+commit;
+
 pro    ============================================
 pro    STEP 3: CREATING TRIGGERS
 pro    ============================================
@@ -77,17 +74,22 @@ SHOW ERRORS TRIGGER trg_author_dob_check;
 @@Triggers/02_trg_prevent_sole_author_delete.sql
 SHOW ERRORS TRIGGER trg_prevent_sole_author_delete;
 
-@@Triggers/03_trg_loan_set_due_date.sql
-SHOW ERRORS TRIGGER trg_loan_set_due_date;
-
-@@Triggers/04_trg_loan_copy_status.sql
+@@Triggers/03_trg_loan_copy_status.sql
 SHOW ERRORS TRIGGER trg_loan_copy_status;
 
-@@Triggers/05_trg_fine_suspend_member.sql
+@@Triggers/04_trg_prevent_double_loan.sql
+SHOW ERRORS TRIGGER trg_prevent_double_loan;
+
+@@Triggers/05_trg_loan_set_due_date.sql
+SHOW ERRORS TRIGGER trg_loan_set_due_date;
+
+@@Triggers/06_trg_fine_suspend_member.sql
 SHOW ERRORS TRIGGER trg_fine_suspend_member;
 
-@@Triggers/06_trg_res_block_if_available.sql
+@@Triggers/07_trg_res_block_if_available.sql
 SHOW ERRORS TRIGGER trg_res_block_if_available;
+
+commit;
 
 pro    ============================================
 pro    STEP 4: VERIFICATION
@@ -107,13 +109,13 @@ select count(*) as table_count
                        'RESERVATIONS',
                        'MEMBER_STATUS_HISTORY' );
 
-pro    -- Trigger status check (all must be ENABLED, none INVALID)
+pro    -- Trigger count + status check (expect 7 rows, all ENABLED)
 select trigger_name,
        status
   from user_triggers
  order by trigger_name;
 
-pro    -- Object validity check (all must show VALID)
+pro    -- Object validity check (expect 0 rows)
 select object_name,
        object_type,
        status
