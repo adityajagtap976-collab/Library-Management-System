@@ -38,3 +38,8 @@ select loan_id,
        member_id,
        return_date
   from loans;
+
+update loans
+   set
+   due_date = trunc(sysdate) - 5
+ where loan_id = 1;
