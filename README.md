@@ -98,3 +98,17 @@ These are documented, not accidental oversights. Flagged here so they aren't red
 - Ampersands in string literals (e.g. publisher names like `Secker & Warburg`) require `SET DEFINE OFF` in the session first, or SQL*Plus will interpret `&` as a substitution-variable prompt and silently abort the statement if cancelled.
 - `SELECT ... INTO` in PL/SQL raises `NO_DATA_FOUND` on zero matching rows rather than returning an empty result — this is used deliberately as control flow in `trg_loan_copy_status` and `trg_fine_suspend_member`, not treated as an unexpected error.
 - After running the build script, always check `SELECT * FROM user_objects WHERE status != 'VALID'` — a trigger can compile with a warning and end up `INVALID` without an obviously loud failure.
+
+- **`generate_overdue_fines` requires manual recompilation after every full rebuild.** This procedure is intentionally *not* included in `00_run_full_build.sql` — a scheduled `DBMS_SCHEDULER` job calling it would fail mid-rebuild if it fired while tables are being dropped and recreated. Because it's excluded from the automated script, dropping and recreating `fines` (as Step 1 does) leaves the procedure `INVALID` — Oracle flags any object that depends on a dropped table this way, even after the table is recreated identically, since the compiled code no longer matches a known-valid definition. After any full rebuild, run:
+```sql
+  ALTER PROCEDURE generate_overdue_fines COMPILE;
+```
+  and re-check `SELECT * FROM user_objects WHERE status != 'VALID'` before assuming the schema is ready.
+
+> **Note:** `trg_fine_suspend_member` is a **compound trigger**, not a plain row-level trigger. The original version queried `fines` — the table it's defined on — from within an `AFTER INSERT ... FOR EACH ROW` block, which raises `ORA-04091: table is mutating` at runtime (a row-level trigger cannot query its own table while the triggering statement is still in progress). The fix separates row-level work (`AFTER EACH ROW`: record which `loan_id`s were touched) from the actual suspension logic (`AFTER STATEMENT`: runs once, after the insert fully completes, when querying `fines` is legal again).
+
+## Resolved Since Initial Build
+
+- **Double-loan prevention** (`trg_prevent_double_loan`) — blocks creating a new loan against a copy that isn't currently `AVAILABLE`.
+- **Overdue-fine automation** (`generate_overdue_fines` procedure + `DBMS_SCHEDULER` job, `Jobs/`) — scans nightly for loans past `due_date` with no `return_date`, generates a `LATE_RETURN` fine scaled by days overdue, guarded against duplicate fines on repeated runs.
+- **`trg_fine_suspend_member` mutating-table bug** — discovered when `generate_overdue_fines` became the first code path all session to actually fire a real `INSERT INTO fines`; fixed via compound trigger (see note above).
