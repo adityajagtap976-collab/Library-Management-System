@@ -23,14 +23,10 @@ begin
        where copy_id = :new.copy_id;
 
       begin
-         select reservation_id,
-                member_id
-           into
-            v_reservation_id,
-            v_reservation_member
+         select reservation_id
+           into v_reservation_id
            from (
-            select reservation_id,
-                   member_id
+            select reservation_id
               from reservations
              where book_id = v_book_id
                and reservation_status = 'WAITING'
@@ -38,10 +34,30 @@ begin
          )
           where rownum = 1;
 
+         select member_id
+           into v_reservation_member
+           from reservations
+          where reservation_id = v_reservation_id
+            and reservation_status = 'WAITING'
+         for update;
+
          update reservations
             set reservation_status = 'FULFILLED',
                 fulfilled_date = sysdate
           where reservation_id = v_reservation_id;
+
+         insert into reservation_status_history (
+            reservation_id,
+            old_status,
+            new_status,
+            change_reason
+         ) values
+            ( v_reservation_id,
+              'WAITING',
+              'FULFILLED',
+              'Copy '
+              || :new.copy_id
+              || ' became available and was assigned.' );
 
          update book_copies
             set
