@@ -37,9 +37,17 @@ select loan_id,
        copy_id,
        member_id,
        return_date
-  from loans;
+  from loans
+ where copy_id in ( 1,
+                    2 );
 
 update loans
    set
    due_date = trunc(sysdate) - 5
  where loan_id = 1;
+
+update loans
+   set
+   return_date = sysdate
+ where loan_id = 1
+   and return_date is null;

@@ -13,7 +13,9 @@ begin
    if v_current_status != 'WAITING' then
       raise_application_error(
          -20005,
-         'Cannot cancel reservation'
+         'Cannot cancel reservation '
+         || p_reservation_id
+         || ': current status is '
          || v_current_status
          || ', not WAITING.'
       );

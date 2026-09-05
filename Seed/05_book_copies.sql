@@ -16,4 +16,4 @@ insert into book_copies (
 select copy_id,
        copy_status
   from book_copies
- where book_id = 1;
+ where copy_id = 1;
