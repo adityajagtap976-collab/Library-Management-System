@@ -1,0 +1,13 @@
+grant select,insert,update,delete on publishers to lms_admin_role;
+grant select,insert,update,delete on authors to lms_admin_role;
+grant select,insert,update,delete on books to lms_admin_role;
+grant select,insert,update,delete on book_authors to lms_admin_role;
+grant select,insert,update,delete on book_copies to lms_admin_role;
+grant select,insert,update,delete on members to lms_admin_role;
+grant select,insert,update,delete on loans to lms_admin_role;
+grant select,insert,update,delete on fines to lms_admin_role;
+grant select,insert,update,delete on reservations to lms_admin_role;
+grant select,insert,update,delete on member_status_history to lms_admin_role;
+grant select,insert,update,delete on reservation_status_history to lms_admin_role;
+grant execute on generate_overdue_fines to lms_admin_role;
+grant execute on cancel_reservation to lms_admin_role;

@@ -1,0 +1,9 @@
+grant select on publishers to lms_member_role;
+grant select on authors to lms_member_role;
+grant select on books to lms_member_role;
+grant select on book_authors to lms_member_role;
+grant select on book_copies to lms_member_role;
+grant select on loans to lms_member_role;
+grant select on fines to lms_member_role;
+grant select,insert on reservations to lms_member_role;
+grant execute on cancel_reservation to lms_member_role;

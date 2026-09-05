@@ -1,0 +1,13 @@
+create public synonym publishers for practice.publishers;
+create public synonym authors for practice.authors;
+create public synonym books for practice.books;
+create public synonym book_authors for practice.book_authors;
+create public synonym book_copies for practice.book_copies;
+create public synonym members for practice.members;
+create public synonym loans for practice.loans;
+create public synonym fines for practice.fines;
+create public synonym reservations for practice.reservations;
+create public synonym member_status_history for practice.member_status_history;
+create public synonym reservation_status_history for practice.reservation_status_history;
+create public synonym generate_overdue_fines for practice.generate_overdue_fines;
+create public synonym cancel_reservation for practice.cancel_reservation;
