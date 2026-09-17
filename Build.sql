@@ -2,7 +2,7 @@
 SET ECHO ON;
 SET FEEDBACK ON;
 
-SPOOL build_log.txt
+   SPOOL build_log.txt
 
 WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK;
 
@@ -13,10 +13,25 @@ pro    ============================================
 WHENEVER SQLERROR CONTINUE;
 
 begin
+   for j in (
+      select job_name
+        from user_scheduler_jobs
+       where job_name = 'JOB_GENERATE_OVERDUE_FINES'
+   ) loop
+      dbms_scheduler.drop_job(
+         job_name => j.job_name,
+         force    => true
+      );
+   end loop;
+end;
+/
+
+begin
    for t in (
       select table_name
         from user_tables
        where table_name in ( 'MEMBER_STATUS_HISTORY',
+                             'RESERVATION_STATUS_HISTORY',
                              'RESERVATIONS',
                              'FINES',
                              'LOANS',
@@ -41,26 +56,7 @@ pro    ============================================
 pro    STEP 2: CREATING TABLES (dependency order)
 pro    ============================================
 
-pro    -- publishers
-@@Tables/01_create_publishers.sql
-pro    -- authors
-@@Tables/02_create_authors.sql
-pro    -- books
-@@Tables/03_create_books.sql
-pro    -- book_authors
-@@Tables/04_create_book_authors.sql
-pro    -- book_copies
-@@Tables/05_create_book_copies.sql
-pro    -- members
-@@Tables/06_create_members.sql
-pro    -- loans
-@@Tables/07_create_loans.sql
-pro    -- fines
-@@Tables/08_create_fines.sql
-pro    -- reservations
-@@Tables/09_create_reservations.sql
-pro    -- member_status_history
-@@Tables/10_create_member_status_history.sql
+@@db/schema/01_schema.sql
 
 commit;
 
@@ -68,34 +64,46 @@ pro    ============================================
 pro    STEP 3: CREATING TRIGGERS
 pro    ============================================
 
-@@Triggers/01_trg_author_dob_check.sql
+@@db/Triggers/01_trg_author_dob_check.sql
 SHOW ERRORS TRIGGER trg_author_dob_check;
 
-@@Triggers/02_trg_prevent_sole_author_delete.sql
+@@db/Triggers/02_trg_prevent_sole_author_delete.sql
 SHOW ERRORS TRIGGER trg_prevent_sole_author_delete;
 
-@@Triggers/03_trg_loan_copy_status.sql
+@@db/Triggers/03_trg_loan_copy_status.sql
 SHOW ERRORS TRIGGER trg_loan_copy_status;
 
-@@Triggers/04_trg_prevent_double_loan.sql
+@@db/Triggers/04_trg_prevent_double_loan.sql
 SHOW ERRORS TRIGGER trg_prevent_double_loan;
 
-@@Triggers/05_trg_loan_set_due_date.sql
+@@db/Triggers/05_trg_loan_set_due_date.sql
 SHOW ERRORS TRIGGER trg_loan_set_due_date;
 
-@@Triggers/06_trg_fine_suspend_member.sql
+@@db/Triggers/06_trg_fine_suspend_member.sql
 SHOW ERRORS TRIGGER trg_fine_suspend_member;
 
-@@Triggers/07_trg_res_block_if_available.sql
+@@db/Triggers/07_trg_res_block_if_available.sql
 SHOW ERRORS TRIGGER trg_res_block_if_available;
 
 commit;
 
 pro    ============================================
-pro    STEP 4: VERIFICATION
+pro    STEP 4: CREATING PROCEDURES
 pro    ============================================
 
-pro    -- Table count check (expect 10)
+@@db/procedures/01_generate_overdue_fines.sql
+SHOW ERRORS PROCEDURE generate_overdue_fines;
+
+@@db/procedures/02_cancel_reservation.sql
+SHOW ERRORS PROCEDURE cancel_reservation;
+
+commit;
+
+pro    ============================================
+pro    STEP 5: VERIFICATION
+pro    ============================================
+
+pro    -- Table count check (expect 11)
 select count(*) as table_count
   from user_tables
  where table_name in ( 'PUBLISHERS',
@@ -107,7 +115,8 @@ select count(*) as table_count
                        'LOANS',
                        'FINES',
                        'RESERVATIONS',
-                       'MEMBER_STATUS_HISTORY' );
+                       'MEMBER_STATUS_HISTORY',
+                       'RESERVATION_STATUS_HISTORY' );
 
 pro    -- Trigger count + status check (expect 7 rows, all ENABLED)
 select trigger_name,

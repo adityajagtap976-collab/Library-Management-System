@@ -5,10 +5,15 @@ A relational schema for a library management system, built incrementally with a 
 ## Structure
 
 ```
-Tables/       -- CREATE TABLE statements, numbered in FK dependency order
-Triggers/     -- CREATE OR REPLACE TRIGGER statements, numbered by table dependency
-Seed/         -- sample INSERT scripts for manual/local testing
-build.sql   -- master script: drop → create → verify, idempotent
+Build.sql       -- repeatable schema build: drop → create → compile → verify
+db/schema/      -- table DDL in dependency order
+db/Triggers/    -- integrity and workflow triggers
+db/procedures/  -- transactional procedures and scheduled-job entry points
+db/Jobs/        -- optional DBMS_SCHEDULER definitions
+db/seeds/       -- deterministic sample data
+db/tests/       -- behavior and regression checks
+db/Security/    -- users, roles, and synonyms (DBA-controlled)
+db/Grants/      -- role privileges (DBA-controlled)
 ```
 
 ## Requirements
@@ -19,12 +24,24 @@ build.sql   -- master script: drop → create → verify, idempotent
 ## Running the Build
 
 ```sql
-SQL> @build.sql
+SQL> @Build.sql
 ```
 
-This is a **full rebuild script** — it drops all ten tables (`CASCADE CONSTRAINTS`, safe to run on a fresh schema where nothing exists yet), recreates everything, compiles all triggers, and runs a verification block (table count, trigger status, invalid-object check). It is safe to re-run at any time; it's idempotent by design.
+This is a **full rebuild script** — it drops all eleven tables (`CASCADE CONSTRAINTS`, safe to run on a fresh schema where nothing exists yet), recreates the schema from `db/schema/01_schema.sql`, compiles triggers and procedures, and runs a verification block. It also removes the application scheduler job before rebuilding so it cannot run against partially recreated tables. It is safe to re-run at any time; it is idempotent by design.
 
 `SET DEFINE OFF` is set at the top — Oracle's SQL*Plus treats `&` as a substitution-variable prefix by default, which will silently corrupt or block any INSERT containing an ampersand (e.g. `'Secker & Warburg'`) unless this is off.
+
+### Optional Deployment Steps
+
+Run these from the project root after `Build.sql` succeeds:
+
+```sql
+SQL> @scripts/seed_demo.sql
+SQL> @scripts/deploy_scheduler.sql
+SQL> @scripts/deploy_security.sql
+```
+
+`seed_demo.sql` loads local sample data only. `deploy_scheduler.sql` installs the daily overdue-fine job. `deploy_security.sql` prompts for the owner schema and user passwords, creates roles, users, synonyms, and grants, and requires DBA privileges. Run `@db/tests/01_behavior_checks.sql` after loading the demo data.
 
 ## Entity-Relationship Overview
 
@@ -91,19 +108,13 @@ These are documented, not accidental oversights. Flagged here so they aren't red
 - **`reservations.reservation_status` has no reason-tracking**, unlike `members` — a `CANCELLED` reservation doesn't record *why*.
 - **`trg_loan_copy_status` fetches `v_reservation_member` but never uses it** — there is no notification mechanism yet telling a member their reservation was fulfilled.
 - **Case/whitespace-fragile `UNIQUE` constraints** on `publishers.publisher_name`, `books.isbn`, `members.email`, `publishers.contact_email` — `'John@x.com'` and `'john@x.com'` are currently treated as distinct. Would need function-based unique indexes on `LOWER(TRIM(...))` to close.
-- **No overdue-fine automation** — nothing currently compares `loans.due_date` to `SYSDATE` and auto-generates a `fines` row; this relies on manual staff action today.
+- **Scheduler deployment is separate from the full rebuild** — run the job script after the schema is stable; this prevents a nightly run from colliding with a rebuild.
 
 ## Testing Notes
 
 - Ampersands in string literals (e.g. publisher names like `Secker & Warburg`) require `SET DEFINE OFF` in the session first, or SQL*Plus will interpret `&` as a substitution-variable prompt and silently abort the statement if cancelled.
 - `SELECT ... INTO` in PL/SQL raises `NO_DATA_FOUND` on zero matching rows rather than returning an empty result — this is used deliberately as control flow in `trg_loan_copy_status` and `trg_fine_suspend_member`, not treated as an unexpected error.
 - After running the build script, always check `SELECT * FROM user_objects WHERE status != 'VALID'` — a trigger can compile with a warning and end up `INVALID` without an obviously loud failure.
-
-- **`generate_overdue_fines` requires manual recompilation after every full rebuild.** This procedure is intentionally *not* included in `00_run_full_build.sql` — a scheduled `DBMS_SCHEDULER` job calling it would fail mid-rebuild if it fired while tables are being dropped and recreated. Because it's excluded from the automated script, dropping and recreating `fines` (as Step 1 does) leaves the procedure `INVALID` — Oracle flags any object that depends on a dropped table this way, even after the table is recreated identically, since the compiled code no longer matches a known-valid definition. After any full rebuild, run:
-```sql
-  ALTER PROCEDURE generate_overdue_fines COMPILE;
-```
-  and re-check `SELECT * FROM user_objects WHERE status != 'VALID'` before assuming the schema is ready.
 
 > **Note:** `trg_fine_suspend_member` is a **compound trigger**, not a plain row-level trigger. The original version queried `fines` — the table it's defined on — from within an `AFTER INSERT ... FOR EACH ROW` block, which raises `ORA-04091: table is mutating` at runtime (a row-level trigger cannot query its own table while the triggering statement is still in progress). The fix separates row-level work (`AFTER EACH ROW`: record which `loan_id`s were touched) from the actual suspension logic (`AFTER STATEMENT`: runs once, after the insert fully completes, when querying `fines` is legal again).
 
