@@ -61,6 +61,7 @@ create table members (
    first_name      varchar2(80) not null,
    last_name       varchar2(80) not null,
    email           varchar2(150) not null,
+   password_hash   varchar2(255) not null,
    phone           varchar2(20),
    membership_date date default sysdate not null,
    member_status   varchar2(20) default 'ACTIVE' not null,
@@ -146,4 +147,17 @@ create table reservation_status_history (
    change_date    date default sysdate not null,
    constraint fk_res_history_reservation foreign key ( reservation_id )
       references reservations ( reservation_id )
+);
+
+create table staff (
+   staff_id      number(10) generated always as identity ( start with 1 increment by 1 ) primary key,
+   first_name    varchar2(80) not null,
+   last_name     varchar2(80) not null,
+   email         varchar2(150) not null,
+   password_hash varchar2(255) not null,
+   is_active     varchar2(1) default 'Y' not null,
+   created_date  date default sysdate not null,
+   constraint uq_staff_email unique ( email ),
+   constraint chk_staff_active check ( is_active in ( 'Y',
+                                                      'N' ) )
 );

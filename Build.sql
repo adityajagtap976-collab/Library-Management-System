@@ -32,6 +32,7 @@ begin
         from user_tables
        where table_name in ( 'MEMBER_STATUS_HISTORY',
                              'RESERVATION_STATUS_HISTORY',
+                             'STAFF',
                              'RESERVATIONS',
                              'FINES',
                              'LOANS',
@@ -103,7 +104,7 @@ pro    ============================================
 pro    STEP 5: VERIFICATION
 pro    ============================================
 
-pro    -- Table count check (expect 11)
+pro    -- Table count check (expect 12)
 select count(*) as table_count
   from user_tables
  where table_name in ( 'PUBLISHERS',
@@ -116,7 +117,8 @@ select count(*) as table_count
                        'FINES',
                        'RESERVATIONS',
                        'MEMBER_STATUS_HISTORY',
-                       'RESERVATION_STATUS_HISTORY' );
+                       'RESERVATION_STATUS_HISTORY',
+                       'STAFF' );
 
 pro    -- Trigger count + status check (expect 7 rows, all ENABLED)
 select trigger_name,
