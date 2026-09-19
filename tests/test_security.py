@@ -1,6 +1,5 @@
 import pytest
-
-from backend.src.lms_api.core.security import (
+from lms_api.core.security import (
     MAX_PASSWORD_LEN,
     hash_password,
     password_needs_rehash,

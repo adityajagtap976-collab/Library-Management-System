@@ -1,4 +1,4 @@
-from backend.src.lms_api.main import app
+from lms_api.main import app
 
 if __name__ == "__main__":
     import uvicorn

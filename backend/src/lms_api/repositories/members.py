@@ -21,6 +21,30 @@ async def find_member_by_email(connection: Any, email: str) -> dict[str, Any] | 
         await cursor.close()
 
 
+async def create_member(
+    connection: Any,
+    first_name: str,
+    last_name: str,
+    email: str,
+    password_hash: str,
+) -> None:
+    cursor = await connection.cursor()
+    try:
+        await cursor.execute(
+            """
+            INSERT INTO members (first_name, last_name, email, password_hash)
+            VALUES (:first_name, :last_name, :email, :password_hash)
+            """,
+            first_name=first_name,
+            last_name=last_name,
+            email=email.strip(),
+            password_hash=password_hash,
+        )
+        await connection.commit()
+    finally:
+        await cursor.close()
+
+
 async def update_member_password_hash(
     connection: Any, member_id: int, password_hash: str
 ) -> None:
