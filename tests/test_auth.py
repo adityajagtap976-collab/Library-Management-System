@@ -34,6 +34,8 @@ class FakeCursor:
         self.date_variables: list[FakeVariable] = []
         self.execute_error = execute_error
         self.rowcount = rowcount
+        self.callproc_name: str | None = None
+        self.callproc_parameters: list[object] | None = None
 
     def var(self, value_type: type[object]) -> "FakeVariable":
         value: object
@@ -58,6 +60,12 @@ class FakeCursor:
             self.date_variables[-1].value = self.returning_return_date
         if "SELECT copy_status" in statement:
             self.fetchone_result = (self.copy_status,)
+
+    async def callproc(self, name: str, parameters: list[object]) -> None:
+        if self.execute_error is not None:
+            raise self.execute_error
+        self.callproc_name = name
+        self.callproc_parameters = parameters
 
     async def fetchone(self) -> tuple[object, ...] | None:
         return self.fetchone_result
