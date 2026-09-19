@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import cast
 
 import jwt
@@ -8,22 +9,35 @@ from lms_api.routers import auth
 
 
 class FakeCursor:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        rows: Sequence[tuple[object, ...]] | None = None,
+        fetchone_result: tuple[object, ...] | None = None,
+    ) -> None:
         self.executed: tuple[str, dict[str, object]] | None = None
+        self.rows = list(rows or [])
+        self.fetchone_result = fetchone_result
 
     async def execute(self, statement: str, **parameters: object) -> None:
         self.executed = (statement, parameters)
 
-    async def fetchone(self) -> None:
-        return None
+    async def fetchone(self) -> tuple[object, ...] | None:
+        return self.fetchone_result
+
+    async def fetchall(self) -> list[tuple[object, ...]]:
+        return self.rows
 
     async def close(self) -> None:
         pass
 
 
 class FakeConnection:
-    def __init__(self) -> None:
-        self.cursor_instance = FakeCursor()
+    def __init__(
+        self,
+        rows: Sequence[tuple[object, ...]] | None = None,
+        fetchone_result: tuple[object, ...] | None = None,
+    ) -> None:
+        self.cursor_instance = FakeCursor(rows, fetchone_result)
         self.commits = 0
 
     async def cursor(self) -> FakeCursor:
