@@ -4,3 +4,4 @@ __pycache__/
 .venv/build_log.txt
 seed_demo_log.txt
 *.log
+build_log.txt
