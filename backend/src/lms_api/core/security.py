@@ -1,6 +1,6 @@
 import os
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Literal, cast
 
 import jwt
 from argon2 import PasswordHasher
@@ -52,7 +52,14 @@ def password_needs_rehash(password_hash: str) -> bool:
     return password_hasher.check_needs_rehash(password_hash)
 
 
-def create_access_token(member_id: int, email: str) -> str:
+def create_access_token(
+    subject_id: int, email: str, role: Literal["member", "staff"]
+) -> str:
     expires_at = datetime.now(UTC) + timedelta(minutes=JWT_EXPIRE_MINUTES)
-    payload = {"sub": str(member_id), "email": email, "exp": expires_at}
+    payload = {
+        "sub": str(subject_id),
+        "email": email,
+        "role": role,
+        "exp": expires_at,
+    }
     return cast(str, jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM))

@@ -15,6 +15,7 @@ from lms_api.repositories.members import (
     find_member_by_email,
     update_member_password_hash,
 )
+from lms_api.repositories.staff import find_staff_by_email
 
 router = APIRouter()
 
@@ -75,6 +76,28 @@ async def login(
             hash_password(credentials.password),
         )
     return {
-        "access_token": create_access_token(member["member_id"], member["email"]),
+        "access_token": create_access_token(
+            member["member_id"], member["email"], role="member"
+        ),
+        "token_type": "bearer",
+    }
+
+
+@router.post("/staff-login")
+async def staff_login(
+    credentials: Credentials,
+    connection: oracledb.AsyncConnection = Depends(get_connection),
+) -> dict[str, str]:
+    staff = await find_staff_by_email(connection, str(credentials.email))
+    stored_hash = staff["password_hash"] if staff else DUMMY_PASSWORD_HASH
+    password_valid = verify_password(credentials.password, stored_hash)
+    if staff is None or staff["is_active"] != "Y" or not password_valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+        )
+    return {
+        "access_token": create_access_token(
+            staff["staff_id"], staff["email"], role="staff"
+        ),
         "token_type": "bearer",
     }

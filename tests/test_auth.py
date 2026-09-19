@@ -86,6 +86,7 @@ async def test_login_returns_signed_access_token(
     )
     assert claims["sub"] == "42"
     assert claims["email"] == "alice@test.com"
+    assert claims["role"] == "member"
     assert response["token_type"] == "bearer"
 
 
@@ -115,5 +116,116 @@ async def test_login_verifies_dummy_hash_for_unknown_member(
     assert captured_hashes == [security.DUMMY_PASSWORD_HASH]
 
 
+@pytest.mark.anyio
+async def test_staff_login_returns_staff_role_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-with-at-least-32-bytes")
+    password_hash = security.hash_password("correct horse battery staple")
+
+    async def find_staff(_connection: object, _email: str) -> dict[str, object]:
+        return _staff(password_hash)
+
+    monkeypatch.setattr(auth, "find_staff_by_email", find_staff)
+
+    response = await auth.staff_login(
+        auth.Credentials(
+            email="admin@test.com",
+            password="correct horse battery staple",
+        ),
+        cast(oracledb.AsyncConnection, FakeConnection()),
+    )
+
+    claims = jwt.decode(
+        response["access_token"],
+        "test-secret-with-at-least-32-bytes",
+        algorithms=["HS256"],
+    )
+    assert claims["sub"] == "7"
+    assert claims["email"] == "admin@test.com"
+    assert claims["role"] == "staff"
+
+
+@pytest.mark.anyio
+async def test_staff_login_rejects_wrong_password(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    password_hash = security.hash_password("correct horse battery staple")
+
+    async def find_staff(_connection: object, _email: str) -> dict[str, object]:
+        return _staff(password_hash)
+
+    monkeypatch.setattr(auth, "find_staff_by_email", find_staff)
+
+    with pytest.raises(auth.HTTPException) as error:
+        await auth.staff_login(
+            auth.Credentials(email="admin@test.com", password="wrong-password"),
+            cast(oracledb.AsyncConnection, FakeConnection()),
+        )
+
+    assert error.value.status_code == 401
+    assert error.value.detail == "Invalid credentials"
+
+
+@pytest.mark.anyio
+async def test_staff_login_rejects_inactive_staff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    password_hash = security.hash_password("correct horse battery staple")
+
+    async def find_staff(_connection: object, _email: str) -> dict[str, object]:
+        return _staff(password_hash, is_active="N")
+
+    monkeypatch.setattr(auth, "find_staff_by_email", find_staff)
+
+    with pytest.raises(auth.HTTPException) as error:
+        await auth.staff_login(
+            auth.Credentials(
+                email="inactive@test.com",
+                password="correct horse battery staple",
+            ),
+            cast(oracledb.AsyncConnection, FakeConnection()),
+        )
+
+    assert error.value.status_code == 401
+    assert error.value.detail == "Invalid credentials"
+
+
+@pytest.mark.anyio
+async def test_staff_login_verifies_dummy_hash_for_unknown_staff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_hashes: list[str] = []
+
+    async def no_staff(_connection: object, _email: str) -> None:
+        return None
+
+    def capture_verification(password: str, password_hash: str) -> bool:
+        captured_hashes.append(password_hash)
+        return False
+
+    monkeypatch.setattr(auth, "find_staff_by_email", no_staff)
+    monkeypatch.setattr(auth, "verify_password", capture_verification)
+
+    with pytest.raises(auth.HTTPException) as error:
+        await auth.staff_login(
+            auth.Credentials(email="missing-staff@test.com", password="password123"),
+            cast(oracledb.AsyncConnection, FakeConnection()),
+        )
+
+    assert error.value.status_code == 401
+    assert error.value.detail == "Invalid credentials"
+    assert captured_hashes == [security.DUMMY_PASSWORD_HASH]
+
+
 def _member(password_hash: str) -> dict[str, object]:
     return {"member_id": 42, "email": "alice@test.com", "password_hash": password_hash}
+
+
+def _staff(password_hash: str, is_active: str = "Y") -> dict[str, object]:
+    return {
+        "staff_id": 7,
+        "email": "admin@test.com",
+        "password_hash": password_hash,
+        "is_active": is_active,
+    }
