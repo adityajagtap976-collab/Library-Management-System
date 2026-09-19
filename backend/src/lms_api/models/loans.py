@@ -11,3 +11,9 @@ class LoanCreate(BaseModel):
 class LoanCreated(BaseModel):
     loan_id: int
     due_date: date
+
+
+class LoanReturned(BaseModel):
+    loan_id: int
+    return_date: date
+    copy_status: str

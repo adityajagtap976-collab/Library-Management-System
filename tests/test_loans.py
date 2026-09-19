@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator, Callable
-from datetime import date
+from datetime import UTC, date, datetime
 
 import httpx
 import oracledb
@@ -140,15 +140,109 @@ async def test_unrecognized_loan_foreign_key_error_is_not_swallowed() -> None:
     assert response.status_code == 500
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("copy_status", ["AVAILABLE", "ON_LOAN"])
+async def test_staff_can_return_loan(copy_status: str) -> None:
+    app.dependency_overrides[get_connection] = _loan_connection(
+        copy_status=copy_status,
+        rowcount=1,
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/loans/123/return",
+                headers={"Authorization": _authorization("staff")},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "loan_id": 123,
+        "return_date": datetime.now(UTC).date().isoformat(),
+        "copy_status": copy_status,
+    }
+
+
+@pytest.mark.anyio
+async def test_returning_nonexistent_loan_returns_404() -> None:
+    app.dependency_overrides[get_connection] = _loan_connection(
+        fetchone_result=None,
+        rowcount=0,
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/loans/999/return",
+                headers={"Authorization": _authorization("staff")},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Loan not found"
+
+
+@pytest.mark.anyio
+async def test_returning_already_returned_loan_returns_prior_date() -> None:
+    prior_return_date = date(2026, 9, 18)
+    app.dependency_overrides[get_connection] = _loan_connection(
+        fetchone_result=(prior_return_date,),
+        rowcount=0,
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/loans/123/return",
+                headers={"Authorization": _authorization("staff")},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        f"Loan was already returned on {prior_return_date}"
+    )
+
+
+@pytest.mark.anyio
+async def test_member_cannot_return_loan() -> None:
+    app.dependency_overrides[get_connection] = _loan_connection()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/loans/123/return",
+                headers={"Authorization": _authorization("member")},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+
+
 def _loan_connection(
     returning_value: int = 1,
     returning_due_date: date = date(2026, 10, 3),
+    copy_status: str = "AVAILABLE",
+    fetchone_result: tuple[object, ...] | None = ("AVAILABLE",),
+    rowcount: int = 1,
     execute_error: Exception | None = None,
 ) -> Callable[[], AsyncIterator[FakeConnection]]:
     async def override() -> AsyncIterator[FakeConnection]:
         yield FakeConnection(
             returning_value=returning_value,
             returning_due_date=returning_due_date,
+            copy_status=copy_status,
+            fetchone_result=fetchone_result,
+            rowcount=rowcount,
             execute_error=execute_error,
         )
 

@@ -16,6 +16,7 @@ class FakeCursor:
         fetchone_result: tuple[object, ...] | None = None,
         returning_value: int = 1,
         returning_due_date: date = date(2026, 10, 3),
+        copy_status: str = "AVAILABLE",
         execute_error: Exception | None = None,
         rowcount: int = 1,
     ) -> None:
@@ -24,6 +25,7 @@ class FakeCursor:
         self.fetchone_result = fetchone_result
         self.returning_value = returning_value
         self.returning_due_date = returning_due_date
+        self.copy_status = copy_status
         self.execute_error = execute_error
         self.rowcount = rowcount
 
@@ -35,6 +37,8 @@ class FakeCursor:
         if self.execute_error is not None:
             raise self.execute_error
         self.executed = (statement, parameters)
+        if "SELECT copy_status" in statement:
+            self.fetchone_result = (self.copy_status,)
 
     async def fetchone(self) -> tuple[object, ...] | None:
         return self.fetchone_result
@@ -53,6 +57,7 @@ class FakeConnection:
         fetchone_result: tuple[object, ...] | None = None,
         returning_value: int = 1,
         returning_due_date: date = date(2026, 10, 3),
+        copy_status: str = "AVAILABLE",
         execute_error: Exception | None = None,
         rowcount: int = 1,
     ) -> None:
@@ -61,6 +66,7 @@ class FakeConnection:
             fetchone_result,
             returning_value,
             returning_due_date,
+            copy_status,
             execute_error,
             rowcount,
         )

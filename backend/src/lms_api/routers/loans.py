@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from lms_api.core.dependencies import Principal, require_role
 from lms_api.db.session import get_connection
-from lms_api.models.loans import LoanCreate, LoanCreated
-from lms_api.repositories.loans import create_loan
+from lms_api.models.loans import LoanCreate, LoanCreated, LoanReturned
+from lms_api.repositories.loans import create_loan, mark_loan_returned
 
 router = APIRouter(prefix="/loans")
 
@@ -48,3 +48,26 @@ async def create_loan_endpoint(
             ) from error
         raise
     return LoanCreated(**created_loan)
+
+
+@router.patch("/{loan_id}/return", response_model=LoanReturned)
+async def return_loan(
+    loan_id: int,
+    _principal: Principal = Depends(require_role("staff")),
+    connection: oracledb.AsyncConnection = Depends(get_connection),
+) -> LoanReturned:
+    try:
+        result = await mark_loan_returned(connection, loan_id)
+    except oracledb.DatabaseError:  # noqa: TRY203
+        raise
+
+    if result["outcome"] == "not_found":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Loan not found"
+        )
+    if result["outcome"] == "already_returned":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Loan was already returned on {result['return_date']}",
+        )
+    return LoanReturned(loan_id=loan_id, **result)
