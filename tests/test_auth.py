@@ -20,19 +20,23 @@ class FakeCursor:
         copy_status: str = "AVAILABLE",
         execute_error: Exception | None = None,
         rowcount: int = 1,
+        rows_by_member_id: dict[int, Sequence[tuple[object, ...]]] | None = None,
     ) -> None:
         self.executed: tuple[str, dict[str, object]] | None = None
+        self.executed_statements: list[tuple[str, dict[str, object]]] = []
         self.rows = list(rows or [])
         self.fetchone_result = fetchone_result
         self.returning_value = returning_value
         self.returning_due_date = returning_due_date
         self.returning_return_date = returning_return_date
         self.copy_status = copy_status
+        self.rows_by_member_id = rows_by_member_id or {}
         self.date_variables: list[FakeVariable] = []
         self.execute_error = execute_error
         self.rowcount = rowcount
 
     def var(self, value_type: type[object]) -> "FakeVariable":
+        value: object
         if value_type is int:
             value = self.returning_value
         else:
@@ -46,6 +50,10 @@ class FakeCursor:
         if self.execute_error is not None:
             raise self.execute_error
         self.executed = (statement, parameters)
+        self.executed_statements.append((statement, parameters))
+        if "WHERE l.member_id = :member_id" in statement:
+            member_id = cast(int, parameters["member_id"])
+            self.rows = list(self.rows_by_member_id.get(member_id, self.rows))
         if "UPDATE loans" in statement:
             self.date_variables[-1].value = self.returning_return_date
         if "SELECT copy_status" in statement:
@@ -72,6 +80,7 @@ class FakeConnection:
         copy_status: str = "AVAILABLE",
         execute_error: Exception | None = None,
         rowcount: int = 1,
+        rows_by_member_id: dict[int, Sequence[tuple[object, ...]]] | None = None,
     ) -> None:
         self.cursor_instance = FakeCursor(
             rows,
@@ -82,6 +91,7 @@ class FakeConnection:
             copy_status,
             execute_error,
             rowcount,
+            rows_by_member_id,
         )
         self.commits = 0
 

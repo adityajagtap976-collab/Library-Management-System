@@ -1,12 +1,41 @@
+from typing import cast
+
 import oracledb
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from lms_api.core.dependencies import Principal, require_role
 from lms_api.db.session import get_connection
-from lms_api.models.loans import LoanCreate, LoanCreated, LoanReturned
-from lms_api.repositories.loans import create_loan, mark_loan_returned
+from lms_api.models.loans import (
+    LoanCreate,
+    LoanCreated,
+    LoanHistoryEntry,
+    LoanReturned,
+    PaginatedLoanHistory,
+)
+from lms_api.repositories.loans import (
+    count_loans_for_member,
+    create_loan,
+    list_loans_for_member,
+    mark_loan_returned,
+)
 
 router = APIRouter(prefix="/loans")
+
+
+@router.get("/mine", response_model=PaginatedLoanHistory)
+async def list_my_loans(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    principal: Principal = Depends(require_role("member")),
+    connection: oracledb.AsyncConnection = Depends(get_connection),
+) -> PaginatedLoanHistory:
+    member_id = int(cast(str, principal["sub"]))
+    items = [
+        LoanHistoryEntry(**loan)
+        for loan in await list_loans_for_member(connection, member_id, limit, offset)
+    ]
+    total = await count_loans_for_member(connection, member_id)
+    return PaginatedLoanHistory(items=items, total=total, limit=limit, offset=offset)
 
 
 def _database_error_details(error: oracledb.DatabaseError) -> tuple[int | None, str]:
