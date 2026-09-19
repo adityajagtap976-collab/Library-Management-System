@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import date
 from typing import cast
 
 import jwt
@@ -14,6 +15,7 @@ class FakeCursor:
         rows: Sequence[tuple[object, ...]] | None = None,
         fetchone_result: tuple[object, ...] | None = None,
         returning_value: int = 1,
+        returning_due_date: date = date(2026, 10, 3),
         execute_error: Exception | None = None,
         rowcount: int = 1,
     ) -> None:
@@ -21,11 +23,13 @@ class FakeCursor:
         self.rows = list(rows or [])
         self.fetchone_result = fetchone_result
         self.returning_value = returning_value
+        self.returning_due_date = returning_due_date
         self.execute_error = execute_error
         self.rowcount = rowcount
 
-    def var(self, _type: type[int]) -> "FakeVariable":
-        return FakeVariable(self.returning_value)
+    def var(self, value_type: type[object]) -> "FakeVariable":
+        value = self.returning_value if value_type is int else self.returning_due_date
+        return FakeVariable(value)
 
     async def execute(self, statement: str, **parameters: object) -> None:
         if self.execute_error is not None:
@@ -48,6 +52,7 @@ class FakeConnection:
         rows: Sequence[tuple[object, ...]] | None = None,
         fetchone_result: tuple[object, ...] | None = None,
         returning_value: int = 1,
+        returning_due_date: date = date(2026, 10, 3),
         execute_error: Exception | None = None,
         rowcount: int = 1,
     ) -> None:
@@ -55,6 +60,7 @@ class FakeConnection:
             rows,
             fetchone_result,
             returning_value,
+            returning_due_date,
             execute_error,
             rowcount,
         )
@@ -68,10 +74,10 @@ class FakeConnection:
 
 
 class FakeVariable:
-    def __init__(self, value: int) -> None:
+    def __init__(self, value: object) -> None:
         self.value = value
 
-    def getvalue(self) -> int:
+    def getvalue(self) -> object:
         return self.value
 
 

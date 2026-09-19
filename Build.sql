@@ -96,6 +96,9 @@ SHOW ERRORS TRIGGER trg_staff_normalize_email;
 @@db/Triggers/10_trg_publishers_normalize_identity.sql
 SHOW ERRORS TRIGGER trg_publishers_normalize_identity;
 
+@@db/Triggers/11_trg_prevent_suspended_loan.sql
+SHOW ERRORS TRIGGER trg_prevent_suspended_loan;
+
 commit;
 
 pro    ============================================
