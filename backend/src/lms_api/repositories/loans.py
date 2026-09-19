@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Any
 
 
@@ -31,16 +31,18 @@ async def mark_loan_returned(connection: Any, loan_id: int) -> dict[str, Any]:
     cursor = await connection.cursor()
     try:
         copy_id = cursor.var(int)
+        return_date = cursor.var(date)
         await cursor.execute(
             """
             UPDATE loans
             SET return_date = SYSDATE
             WHERE loan_id = :loan_id
               AND return_date IS NULL
-            RETURNING copy_id INTO :copy_id
+            RETURNING copy_id, return_date INTO :copy_id, :return_date
             """,
             loan_id=loan_id,
             copy_id=copy_id,
+            return_date=return_date,
         )
 
         if cursor.rowcount == 0:
@@ -70,7 +72,7 @@ async def mark_loan_returned(connection: Any, loan_id: int) -> dict[str, Any]:
         row = await cursor.fetchone()
         return {
             "outcome": "returned",
-            "return_date": datetime.now(UTC).date(),
+            "return_date": return_date.getvalue(),
             "copy_status": row[0],
         }
     finally:

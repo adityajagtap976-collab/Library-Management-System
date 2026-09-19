@@ -16,6 +16,7 @@ class FakeCursor:
         fetchone_result: tuple[object, ...] | None = None,
         returning_value: int = 1,
         returning_due_date: date = date(2026, 10, 3),
+        returning_return_date: date = date(2026, 9, 19),
         copy_status: str = "AVAILABLE",
         execute_error: Exception | None = None,
         rowcount: int = 1,
@@ -25,18 +26,28 @@ class FakeCursor:
         self.fetchone_result = fetchone_result
         self.returning_value = returning_value
         self.returning_due_date = returning_due_date
+        self.returning_return_date = returning_return_date
         self.copy_status = copy_status
+        self.date_variables: list[FakeVariable] = []
         self.execute_error = execute_error
         self.rowcount = rowcount
 
     def var(self, value_type: type[object]) -> "FakeVariable":
-        value = self.returning_value if value_type is int else self.returning_due_date
-        return FakeVariable(value)
+        if value_type is int:
+            value = self.returning_value
+        else:
+            value = self.returning_due_date
+        variable = FakeVariable(value)
+        if value_type is not int:
+            self.date_variables.append(variable)
+        return variable
 
     async def execute(self, statement: str, **parameters: object) -> None:
         if self.execute_error is not None:
             raise self.execute_error
         self.executed = (statement, parameters)
+        if "UPDATE loans" in statement:
+            self.date_variables[-1].value = self.returning_return_date
         if "SELECT copy_status" in statement:
             self.fetchone_result = (self.copy_status,)
 
@@ -57,6 +68,7 @@ class FakeConnection:
         fetchone_result: tuple[object, ...] | None = None,
         returning_value: int = 1,
         returning_due_date: date = date(2026, 10, 3),
+        returning_return_date: date = date(2026, 9, 19),
         copy_status: str = "AVAILABLE",
         execute_error: Exception | None = None,
         rowcount: int = 1,
@@ -66,6 +78,7 @@ class FakeConnection:
             fetchone_result,
             returning_value,
             returning_due_date,
+            returning_return_date,
             copy_status,
             execute_error,
             rowcount,

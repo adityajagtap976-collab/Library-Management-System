@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator, Callable
-from datetime import UTC, date, datetime
+from datetime import date
 
 import httpx
 import oracledb
@@ -143,8 +143,10 @@ async def test_unrecognized_loan_foreign_key_error_is_not_swallowed() -> None:
 @pytest.mark.anyio
 @pytest.mark.parametrize("copy_status", ["AVAILABLE", "ON_LOAN"])
 async def test_staff_can_return_loan(copy_status: str) -> None:
+    database_return_date = date(2026, 9, 20)
     app.dependency_overrides[get_connection] = _loan_connection(
         copy_status=copy_status,
+        returning_return_date=database_return_date,
         rowcount=1,
     )
     try:
@@ -161,7 +163,7 @@ async def test_staff_can_return_loan(copy_status: str) -> None:
     assert response.status_code == 200
     assert response.json() == {
         "loan_id": 123,
-        "return_date": datetime.now(UTC).date().isoformat(),
+        "return_date": database_return_date.isoformat(),
         "copy_status": copy_status,
     }
 
@@ -231,6 +233,7 @@ async def test_member_cannot_return_loan() -> None:
 def _loan_connection(
     returning_value: int = 1,
     returning_due_date: date = date(2026, 10, 3),
+    returning_return_date: date = date(2026, 9, 19),
     copy_status: str = "AVAILABLE",
     fetchone_result: tuple[object, ...] | None = ("AVAILABLE",),
     rowcount: int = 1,
@@ -240,6 +243,7 @@ def _loan_connection(
         yield FakeConnection(
             returning_value=returning_value,
             returning_due_date=returning_due_date,
+            returning_return_date=returning_return_date,
             copy_status=copy_status,
             fetchone_result=fetchone_result,
             rowcount=rowcount,
