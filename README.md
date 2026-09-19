@@ -107,7 +107,7 @@ These are documented, not accidental oversights. Flagged here so they aren't red
 - **No protection against double-loaning an already-`ON_LOAN` copy.** The FK on `loans.copy_id` only checks the copy exists, not that it's actually available.
 - **`reservations.reservation_status` has no reason-tracking**, unlike `members` — a `CANCELLED` reservation doesn't record *why*.
 - **`trg_loan_copy_status` fetches `v_reservation_member` but never uses it** — there is no notification mechanism yet telling a member their reservation was fulfilled.
-- **Case/whitespace-fragile `UNIQUE` constraints** on `publishers.publisher_name`, `books.isbn`, `members.email`, `publishers.contact_email` — `'John@x.com'` and `'john@x.com'` are currently treated as distinct. Would need function-based unique indexes on `LOWER(TRIM(...))` to close.
+- **Case/whitespace-insensitive identity fields** — member/staff emails and publisher names/contact emails are trimmed on write and protected by function-based unique indexes on `LOWER(...)`; stored casing remains available for display.
 - **Scheduler deployment is separate from the full rebuild** — run the job script after the schema is stable; this prevents a nightly run from colliding with a rebuild.
 
 ## Testing Notes

@@ -58,6 +58,7 @@ pro    STEP 2: CREATING TABLES (dependency order)
 pro    ============================================
 
 @@db/schema/01_schema.sql
+@@db/schema/02_case_insensitive_uniqueness.sql
 
 commit;
 
@@ -85,6 +86,15 @@ SHOW ERRORS TRIGGER trg_fine_suspend_member;
 
 @@db/Triggers/07_trg_res_block_if_available.sql
 SHOW ERRORS TRIGGER trg_res_block_if_available;
+
+@@db/Triggers/08_trg_members_normalize_email.sql
+SHOW ERRORS TRIGGER trg_members_normalize_email;
+
+@@db/Triggers/09_trg_staff_normalize_email.sql
+SHOW ERRORS TRIGGER trg_staff_normalize_email;
+
+@@db/Triggers/10_trg_publishers_normalize_identity.sql
+SHOW ERRORS TRIGGER trg_publishers_normalize_identity;
 
 commit;
 
@@ -120,7 +130,7 @@ select count(*) as table_count
                        'RESERVATION_STATUS_HISTORY',
                        'STAFF' );
 
-pro    -- Trigger count + status check (expect 7 rows, all ENABLED)
+pro    -- Trigger count + status check (expect 10 rows, all ENABLED)
 select trigger_name,
        status
   from user_triggers
