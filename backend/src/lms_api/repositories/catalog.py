@@ -1,4 +1,80 @@
+from datetime import date
 from typing import Any
+
+
+async def create_book(
+    connection: Any,
+    title: str,
+    isbn: str,
+    publisher_id: int,
+    genre: str | None,
+    publication_date: date | None,
+) -> int:
+    cursor = await connection.cursor()
+    try:
+        book_id = cursor.var(int)
+        await cursor.execute(
+            """
+            INSERT INTO books (
+                title, isbn, publisher_id, genre, publication_date
+            ) VALUES (
+                :title, :isbn, :publisher_id, :genre, :publication_date
+            )
+            RETURNING book_id INTO :book_id
+            """,
+            title=title,
+            isbn=isbn,
+            publisher_id=publisher_id,
+            genre=genre,
+            publication_date=publication_date,
+            book_id=book_id,
+        )
+        await connection.commit()
+        return int(book_id.getvalue())
+    finally:
+        await cursor.close()
+
+
+async def add_book_copy(
+    connection: Any, book_id: int, shelf_location: str | None
+) -> int:
+    cursor = await connection.cursor()
+    try:
+        copy_id = cursor.var(int)
+        await cursor.execute(
+            """
+            INSERT INTO book_copies (book_id, shelf_location)
+            VALUES (:book_id, :shelf_location)
+            RETURNING copy_id INTO :copy_id
+            """,
+            book_id=book_id,
+            shelf_location=shelf_location,
+            copy_id=copy_id,
+        )
+        await connection.commit()
+        return int(copy_id.getvalue())
+    finally:
+        await cursor.close()
+
+
+async def update_copy_status(connection: Any, copy_id: int, new_status: str) -> bool:
+    cursor = await connection.cursor()
+    try:
+        await cursor.execute(
+            """
+            UPDATE book_copies
+            SET copy_status = :new_status
+            WHERE copy_id = :copy_id
+            """,
+            new_status=new_status,
+            copy_id=copy_id,
+        )
+        if cursor.rowcount == 0:
+            return False
+        await connection.commit()
+        return True
+    finally:
+        await cursor.close()
 
 
 async def list_books(connection: Any, limit: int, offset: int) -> list[dict[str, Any]]:

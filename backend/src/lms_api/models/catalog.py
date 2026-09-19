@@ -1,4 +1,7 @@
-from pydantic import BaseModel
+from datetime import date
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class BookSummary(BaseModel):
@@ -25,3 +28,19 @@ class PaginatedBooks(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class BookCreate(BaseModel):
+    title: str
+    isbn: str = Field(min_length=10, max_length=20)
+    publisher_id: int
+    genre: str | None = None
+    publication_date: date | None = None
+
+
+class BookCopyCreate(BaseModel):
+    shelf_location: str | None = None
+
+
+class CopyStatusUpdate(BaseModel):
+    copy_status: Literal["AVAILABLE", "ON_LOAN", "LOST", "DAMAGED", "WITHDRAWN"]

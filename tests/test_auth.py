@@ -13,12 +13,23 @@ class FakeCursor:
         self,
         rows: Sequence[tuple[object, ...]] | None = None,
         fetchone_result: tuple[object, ...] | None = None,
+        returning_value: int = 1,
+        execute_error: Exception | None = None,
+        rowcount: int = 1,
     ) -> None:
         self.executed: tuple[str, dict[str, object]] | None = None
         self.rows = list(rows or [])
         self.fetchone_result = fetchone_result
+        self.returning_value = returning_value
+        self.execute_error = execute_error
+        self.rowcount = rowcount
+
+    def var(self, _type: type[int]) -> "FakeVariable":
+        return FakeVariable(self.returning_value)
 
     async def execute(self, statement: str, **parameters: object) -> None:
+        if self.execute_error is not None:
+            raise self.execute_error
         self.executed = (statement, parameters)
 
     async def fetchone(self) -> tuple[object, ...] | None:
@@ -36,8 +47,17 @@ class FakeConnection:
         self,
         rows: Sequence[tuple[object, ...]] | None = None,
         fetchone_result: tuple[object, ...] | None = None,
+        returning_value: int = 1,
+        execute_error: Exception | None = None,
+        rowcount: int = 1,
     ) -> None:
-        self.cursor_instance = FakeCursor(rows, fetchone_result)
+        self.cursor_instance = FakeCursor(
+            rows,
+            fetchone_result,
+            returning_value,
+            execute_error,
+            rowcount,
+        )
         self.commits = 0
 
     async def cursor(self) -> FakeCursor:
@@ -45,6 +65,14 @@ class FakeConnection:
 
     async def commit(self) -> None:
         self.commits += 1
+
+
+class FakeVariable:
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def getvalue(self) -> int:
+        return self.value
 
 
 @pytest.mark.anyio
