@@ -95,6 +95,7 @@ async def test_create_loan_maps_business_errors(
     ("constraint_name", "expected_detail"),
     [("FK_LOANS_COPY", "Copy not found"), ("FK_LOANS_MEMBER", "Member not found")],
 )
+# This validates router mapping only, not the trigger's behavior against real Oracle.
 async def test_create_loan_maps_missing_references(
     constraint_name: str, expected_detail: str
 ) -> None:

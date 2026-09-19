@@ -19,5 +19,8 @@ begin
          || ' and cannot check out books.'
       );
    end if;
+exception
+   when no_data_found then
+      null;
 end;
 /
