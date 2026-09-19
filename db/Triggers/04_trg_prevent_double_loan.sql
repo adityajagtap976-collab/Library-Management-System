@@ -7,7 +7,8 @@ begin
    select copy_status
      into v_copy_status
      from book_copies
-    where copy_id = :new.copy_id;
+    where copy_id = :new.copy_id
+   for update;  -- second concurrent transaction blocks here until the first commits
 
    if v_copy_status != 'AVAILABLE' then
       raise_application_error(
