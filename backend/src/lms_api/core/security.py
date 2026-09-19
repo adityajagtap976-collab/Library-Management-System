@@ -22,6 +22,19 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = 30
 
 
+def _get_jwt_secret() -> str:
+    secret = os.environ.get("JWT_SECRET_KEY")
+    if not secret or len(secret) < 32:
+        raise RuntimeError(
+            "JWT_SECRET_KEY must be set to a value of at least 32 bytes - "
+            "refusing to start with an insecure default"
+        )
+    return secret
+
+
+JWT_SECRET = _get_jwt_secret()
+
+
 def hash_password(password: str) -> str:
     if not password or len(password) > MAX_PASSWORD_LEN:
         raise ValueError("invalid password length")
@@ -40,7 +53,6 @@ def password_needs_rehash(password_hash: str) -> bool:
 
 
 def create_access_token(member_id: int, email: str) -> str:
-    secret = os.environ.get("JWT_SECRET_KEY", "change-me-in-production")
     expires_at = datetime.now(UTC) + timedelta(minutes=JWT_EXPIRE_MINUTES)
     payload = {"sub": str(member_id), "email": email, "exp": expires_at}
-    return cast(str, jwt.encode(payload, secret, algorithm=JWT_ALGORITHM))
+    return cast(str, jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM))
