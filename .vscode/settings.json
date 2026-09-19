@@ -1,0 +1,4 @@
+{
+"mypy-type-checker.args": ["--disallow-untyped-defs", "--disallow-incomplete-defs", "--check-untyped-defs", "--warn-return-any", "--warn-unused-ignores", "--strict-equality"],
+"mypy-type-checker.path": ["${workspaceFolder}/.venv/Scripts/mypy.exe"]
+}
