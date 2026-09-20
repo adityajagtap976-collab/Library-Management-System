@@ -59,6 +59,7 @@ pro    ============================================
 
 @@db/schema/01_schema.sql
 @@db/schema/02_case_insensitive_uniqueness.sql
+@@db/schema/03_reservation_active_uniqueness.sql
 
 commit;
 

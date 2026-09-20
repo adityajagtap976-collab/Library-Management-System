@@ -157,3 +157,30 @@ async def test_member_cannot_cancel_missing_reservation() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_member_can_complete_two_reserve_cancel_cycles() -> None:
+    app.dependency_overrides[get_connection] = _connection_override(
+        fetchone_result=(7,)
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            headers = {"Authorization": _member_authorization(7)}
+            first_create = await client.post(
+                "/reservations", json={"book_id": 42}, headers=headers
+            )
+            first_cancel = await client.delete("/reservations/501", headers=headers)
+            second_create = await client.post(
+                "/reservations", json={"book_id": 42}, headers=headers
+            )
+            second_cancel = await client.delete("/reservations/501", headers=headers)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first_create.status_code == 201
+    assert first_cancel.status_code == 204
+    assert second_create.status_code == 201
+    assert second_cancel.status_code == 204
