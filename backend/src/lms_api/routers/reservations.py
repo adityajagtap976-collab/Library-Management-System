@@ -1,17 +1,42 @@
 from typing import cast
 
 import oracledb
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from lms_api.core.dependencies import Principal, require_role
 from lms_api.db.session import get_connection
-from lms_api.models.reservations import ReservationCreate, ReservationCreated
+from lms_api.models.reservations import (
+    PaginatedReservations,
+    ReservationCreate,
+    ReservationCreated,
+    ReservationHistoryEntry,
+)
 from lms_api.repositories.reservations import (
     cancel_reservation,
+    count_reservations_for_member,
     create_reservation,
+    list_reservations_for_member,
 )
 
 router = APIRouter(prefix="/reservations")
+
+
+@router.get("/mine", response_model=PaginatedReservations)
+async def list_my_reservations(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    principal: Principal = Depends(require_role("member")),
+    connection: oracledb.AsyncConnection = Depends(get_connection),
+) -> PaginatedReservations:
+    member_id = int(cast(str, principal["sub"]))
+    items = [
+        ReservationHistoryEntry(**reservation)
+        for reservation in await list_reservations_for_member(
+            connection, member_id, limit, offset
+        )
+    ]
+    total = await count_reservations_for_member(connection, member_id)
+    return PaginatedReservations(items=items, total=total, limit=limit, offset=offset)
 
 
 def _database_error_details(error: oracledb.DatabaseError) -> tuple[int | None, str]:

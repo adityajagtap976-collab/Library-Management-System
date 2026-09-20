@@ -53,7 +53,10 @@ class FakeCursor:
             raise self.execute_error
         self.executed = (statement, parameters)
         self.executed_statements.append((statement, parameters))
-        if "WHERE l.member_id = :member_id" in statement:
+        if (
+            "WHERE l.member_id = :member_id" in statement
+            or "WHERE r.member_id = :member_id" in statement
+        ):
             member_id = cast(int, parameters["member_id"])
             self.rows = list(self.rows_by_member_id.get(member_id, self.rows))
         if "UPDATE loans" in statement:

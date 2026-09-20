@@ -1,5 +1,6 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import date
+from typing import cast
 
 import httpx
 import oracledb
@@ -8,6 +9,7 @@ from lms_api.db.session import get_connection
 from lms_api.main import app
 
 from tests.test_auth import FakeConnection
+from tests.test_catalog import _authorization
 from tests.test_loans import _member_authorization
 
 
@@ -20,6 +22,7 @@ def _connection_override(
     *,
     execute_error: Exception | None = None,
     fetchone_result: tuple[object, ...] | None = (7,),
+    rows_by_member_id: dict[int, Sequence[tuple[object, ...]]] | None = None,
 ) -> Callable[[], AsyncIterator[FakeConnection]]:
     async def override() -> AsyncIterator[FakeConnection]:
         yield FakeConnection(
@@ -27,6 +30,7 @@ def _connection_override(
             returning_due_date=date(2026, 9, 19),
             execute_error=execute_error,
             fetchone_result=fetchone_result,
+            rows_by_member_id=rows_by_member_id,
         )
 
     return override
@@ -157,6 +161,144 @@ async def test_member_cannot_cancel_missing_reservation() -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
+
+
+RESERVATION_ROWS = cast(
+    dict[int, Sequence[tuple[object, ...]]],
+    {
+        7: [
+            (101, "Dune", "9780451524935", date(2026, 9, 18), "WAITING", None),
+            (
+                102,
+                "Foundation",
+                "9780553293357",
+                date(2026, 9, 12),
+                "FULFILLED",
+                date(2026, 9, 15),
+            ),
+            (103, "1984", "9780451524935", date(2026, 9, 10), "CANCELLED", None),
+        ],
+        8: [(201, "The Hobbit", "9780261102217", date(2026, 9, 19), "WAITING", None)],
+    },
+)
+
+
+@pytest.mark.anyio
+async def test_member_can_list_own_reservations() -> None:
+    app.dependency_overrides[get_connection] = _connection_override(
+        fetchone_result=(3,),
+        rows_by_member_id=RESERVATION_ROWS,
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/reservations/mine?limit=10&offset=0",
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "reservation_id": 101,
+                "title": "Dune",
+                "isbn": "9780451524935",
+                "reservation_date": "2026-09-18",
+                "reservation_status": "WAITING",
+                "fulfilled_date": None,
+            },
+            {
+                "reservation_id": 102,
+                "title": "Foundation",
+                "isbn": "9780553293357",
+                "reservation_date": "2026-09-12",
+                "reservation_status": "FULFILLED",
+                "fulfilled_date": "2026-09-15",
+            },
+            {
+                "reservation_id": 103,
+                "title": "1984",
+                "isbn": "9780451524935",
+                "reservation_date": "2026-09-10",
+                "reservation_status": "CANCELLED",
+                "fulfilled_date": None,
+            },
+        ],
+        "total": 3,
+        "limit": 10,
+        "offset": 0,
+    }
+
+
+@pytest.mark.anyio
+async def test_member_reservation_history_binds_integer_subject_and_isolates_rows() -> (
+    None
+):
+    connection = FakeConnection(
+        rows_by_member_id=RESERVATION_ROWS,
+        fetchone_result=(3,),
+    )
+
+    async def connection_override() -> AsyncIterator[FakeConnection]:
+        yield connection
+
+    app.dependency_overrides[get_connection] = connection_override
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/reservations/mine",
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    reservation_query = next(
+        parameters
+        for statement, parameters in connection.cursor_instance.executed_statements
+        if "WHERE r.member_id = :member_id" in statement
+    )
+    assert reservation_query["member_id"] == 7
+
+
+@pytest.mark.anyio
+async def test_staff_cannot_list_member_reservations() -> None:
+    app.dependency_overrides[get_connection] = _connection_override()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/reservations/mine",
+                headers={"Authorization": _authorization("staff")},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_reservation_history_limit_is_capped_by_query_validation() -> None:
+    app.dependency_overrides[get_connection] = _connection_override()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/reservations/mine?limit=500",
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
 
 
 @pytest.mark.anyio

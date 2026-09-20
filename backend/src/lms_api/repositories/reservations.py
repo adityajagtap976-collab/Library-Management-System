@@ -58,3 +58,59 @@ async def cancel_reservation(
         return "cancelled"
     finally:
         await cursor.close()
+
+
+async def list_reservations_for_member(
+    connection: Any, member_id: int, limit: int, offset: int
+) -> list[dict[str, Any]]:
+    cursor = await connection.cursor()
+    try:
+        await cursor.execute(
+            """
+            SELECT r.reservation_id,
+                   b.title,
+                   b.isbn,
+                   r.reservation_date,
+                   r.reservation_status,
+                   r.fulfilled_date
+            FROM reservations r
+            JOIN books b ON b.book_id = r.book_id
+            WHERE r.member_id = :member_id
+            ORDER BY r.reservation_date DESC
+            OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+            """,
+            member_id=member_id,
+            limit=limit,
+            offset=offset,
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "reservation_id": row[0],
+                "title": row[1],
+                "isbn": row[2],
+                "reservation_date": row[3],
+                "reservation_status": row[4],
+                "fulfilled_date": row[5],
+            }
+            for row in rows
+        ]
+    finally:
+        await cursor.close()
+
+
+async def count_reservations_for_member(connection: Any, member_id: int) -> int:
+    cursor = await connection.cursor()
+    try:
+        await cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM reservations
+            WHERE member_id = :member_id
+            """,
+            member_id=member_id,
+        )
+        row = await cursor.fetchone()
+        return int(row[0])
+    finally:
+        await cursor.close()
