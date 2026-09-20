@@ -146,3 +146,111 @@ async def test_member_token_cannot_access_staff_member_endpoints(path: str) -> N
         app.dependency_overrides.clear()
 
     assert response.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_member_can_get_own_profile() -> None:
+    app.dependency_overrides[get_connection] = _member_connection()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/members/me",
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["member_id"] == 7
+    assert response.json()["member_status"] == "SUSPENDED"
+
+
+@pytest.mark.anyio
+async def test_member_can_update_own_contact_info() -> None:
+    app.dependency_overrides[get_connection] = _member_connection()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/members/me",
+                json={
+                    "first_name": "Alicia",
+                    "last_name": "Borrower",
+                    "phone": "555-0111",
+                },
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["first_name"] == "Alicia"
+    assert response.json()["phone"] == "555-0111"
+
+
+@pytest.mark.anyio
+async def test_member_contact_name_length_is_validated() -> None:
+    app.dependency_overrides[get_connection] = _member_connection()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/members/me",
+                json={"first_name": "A" * 81, "last_name": "Borrower"},
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_member_contact_update_rejects_member_id_field() -> None:
+    app.dependency_overrides[get_connection] = _member_connection()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/members/me",
+                json={
+                    "member_id": 999,
+                    "first_name": "Alicia",
+                    "last_name": "Borrower",
+                },
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("method", ["get", "patch"])
+async def test_staff_cannot_access_member_self_profile(method: str) -> None:
+    app.dependency_overrides[get_connection] = _member_connection()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            if method == "get":
+                response = await client.get(
+                    "/members/me",
+                    headers={"Authorization": _authorization("staff")},
+                )
+            else:
+                response = await client.patch(
+                    "/members/me",
+                    json={"first_name": "Alicia", "last_name": "Borrower"},
+                    headers={"Authorization": _authorization("staff")},
+                )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403

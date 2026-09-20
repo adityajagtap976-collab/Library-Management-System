@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -6,14 +6,17 @@ from lms_api.core.dependencies import Principal, require_role
 from lms_api.db.session import get_connection
 from lms_api.models.fines import FineHistoryEntry, PaginatedFines
 from lms_api.models.loans import LoanHistoryEntry, PaginatedLoanHistory
-from lms_api.models.members import MemberProfile
+from lms_api.models.members import MemberContactUpdate, MemberProfile
 from lms_api.models.reservations import (
     PaginatedReservations,
     ReservationHistoryEntry,
 )
 from lms_api.repositories.fines import count_fines_for_member, list_fines_for_member
 from lms_api.repositories.loans import count_loans_for_member, list_loans_for_member
-from lms_api.repositories.members import get_member_by_id
+from lms_api.repositories.members import (
+    get_member_by_id,
+    update_member_contact_info,
+)
 from lms_api.repositories.reservations import (
     count_reservations_for_member,
     list_reservations_for_member,
@@ -29,6 +32,38 @@ async def _require_member(connection: Any, member_id: int) -> dict[str, Any]:
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
     return member
+
+
+@router.get("/me", response_model=MemberProfile)
+async def get_my_member_profile(
+    principal: Principal = Depends(require_role("member")),
+    connection: Any = Depends(get_connection),
+) -> MemberProfile:
+    return MemberProfile(
+        **await _require_member(connection, int(cast(str, principal["sub"])))
+    )
+
+
+@router.patch("/me", response_model=MemberProfile)
+async def update_my_member_profile(
+    update: MemberContactUpdate,
+    principal: Principal = Depends(require_role("member")),
+    connection: Any = Depends(get_connection),
+) -> MemberProfile:
+    member_id = int(cast(str, principal["sub"]))
+    updated = await update_member_contact_info(
+        connection,
+        member_id,
+        update.first_name,
+        update.last_name,
+        update.phone,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Member profile could not be updated",
+        )
+    return MemberProfile(**await _require_member(connection, member_id))
 
 
 @router.get("/{member_id}", response_model=MemberProfile)

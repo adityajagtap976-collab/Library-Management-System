@@ -68,6 +68,18 @@ class FakeCursor:
         if "SELECT member_id," in statement and "first_name" in statement:
             member_id = cast(int, parameters["member_id"])
             self.fetchone_result = self.member_profiles.get(member_id)
+        if "SET first_name = :first_name" in statement:
+            member_id = cast(int, parameters["member_id"])
+            profile = self.member_profiles.get(member_id)
+            if profile is not None:
+                self.member_profiles[member_id] = (
+                    profile[0],
+                    parameters["first_name"],
+                    parameters["last_name"],
+                    profile[3],
+                    parameters["phone"],
+                    profile[5],
+                )
         if "UPDATE loans" in statement:
             self.date_variables[-1].value = self.returning_return_date
         if "UPDATE fines" in statement:

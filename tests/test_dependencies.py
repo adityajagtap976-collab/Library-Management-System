@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -10,7 +11,10 @@ from lms_api.core.security import (
     JWT_SECRET,
     create_access_token,
 )
+from lms_api.db.session import get_connection
 from lms_api.main import app
+
+from tests.test_auth import FakeConnection
 
 
 @pytest.mark.anyio
@@ -93,31 +97,40 @@ async def test_protected_me_routes_enforce_roles() -> None:
     member_token = create_access_token(42, "member@test.com", role="member")
     staff_token = create_access_token(7, "staff@test.com", role="staff")
 
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        member_response = await client.get(
-            "/members/me",
-            headers={"Authorization": f"Bearer {member_token}"},
-        )
-        member_staff_response = await client.get(
-            "/staff/me",
-            headers={"Authorization": f"Bearer {member_token}"},
-        )
-        staff_response = await client.get(
-            "/staff/me",
-            headers={"Authorization": f"Bearer {staff_token}"},
-        )
-        staff_member_response = await client.get(
-            "/members/me",
-            headers={"Authorization": f"Bearer {staff_token}"},
+    async def connection_override() -> AsyncIterator[FakeConnection]:
+        yield FakeConnection(
+            member_profiles={
+                42: (42, "Alice", "Borrower", "member@test.com", None, "ACTIVE")
+            }
         )
 
+    app.dependency_overrides[get_connection] = connection_override
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            member_response = await client.get(
+                "/members/me",
+                headers={"Authorization": f"Bearer {member_token}"},
+            )
+            member_staff_response = await client.get(
+                "/staff/me",
+                headers={"Authorization": f"Bearer {member_token}"},
+            )
+            staff_response = await client.get(
+                "/staff/me",
+                headers={"Authorization": f"Bearer {staff_token}"},
+            )
+            staff_member_response = await client.get(
+                "/members/me",
+                headers={"Authorization": f"Bearer {staff_token}"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
     assert member_response.status_code == 200
-    assert member_response.json() == {
-        "member_id": "42",
-        "email": "member@test.com",
-    }
+    assert member_response.json()["member_id"] == 42
+    assert member_response.json()["email"] == "member@test.com"
     assert member_staff_response.status_code == 403
     assert staff_response.status_code == 200
     assert staff_response.json() == {"staff_id": "7", "email": "staff@test.com"}

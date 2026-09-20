@@ -93,3 +93,31 @@ async def update_member_password_hash(
         await connection.commit()
     finally:
         await cursor.close()
+
+
+async def update_member_contact_info(
+    connection: Any,
+    member_id: int,
+    first_name: str,
+    last_name: str,
+    phone: str | None,
+) -> bool:
+    cursor = await connection.cursor()
+    try:
+        await cursor.execute(
+            """
+            UPDATE members
+            SET first_name = :first_name,
+                last_name = :last_name,
+                phone = :phone
+            WHERE member_id = :member_id
+            """,
+            first_name=first_name,
+            last_name=last_name,
+            phone=phone,
+            member_id=member_id,
+        )
+        await connection.commit()
+        return bool(cursor.rowcount > 0)
+    finally:
+        await cursor.close()
