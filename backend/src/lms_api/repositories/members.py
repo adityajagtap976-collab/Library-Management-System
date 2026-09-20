@@ -21,6 +21,37 @@ async def find_member_by_email(connection: Any, email: str) -> dict[str, Any] | 
         await cursor.close()
 
 
+async def get_member_by_id(connection: Any, member_id: int) -> dict[str, Any] | None:
+    cursor = await connection.cursor()
+    try:
+        await cursor.execute(
+            """
+            SELECT member_id,
+                   first_name,
+                   last_name,
+                   email,
+                   phone,
+                   member_status
+            FROM members
+            WHERE member_id = :member_id
+            """,
+            member_id=member_id,
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "member_id": row[0],
+            "first_name": row[1],
+            "last_name": row[2],
+            "email": row[3],
+            "phone": row[4],
+            "member_status": row[5],
+        }
+    finally:
+        await cursor.close()
+
+
 async def create_member(
     connection: Any,
     first_name: str,
