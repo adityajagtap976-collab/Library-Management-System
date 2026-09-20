@@ -11,6 +11,12 @@ begin
      from loans
     where loan_id = :new.loan_id;
 
+   select member_status
+     into v_old_status
+     from members
+    where member_id = v_member_id
+   for update;
+
    select nvl(
       sum(f.fine_amount),
       0
@@ -21,11 +27,6 @@ begin
    on l.loan_id = f.loan_id
     where l.member_id = v_member_id
       and f.paid_date is null;
-
-   select member_status
-     into v_old_status
-     from members
-    where member_id = v_member_id;
 
    if
       v_unpaid_total < 2000
