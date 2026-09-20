@@ -17,10 +17,12 @@ class FakeCursor:
         returning_value: int = 1,
         returning_due_date: date = date(2026, 10, 3),
         returning_return_date: date = date(2026, 9, 19),
+        returning_paid_date: date = date(2026, 9, 20),
         copy_status: str = "AVAILABLE",
         execute_error: Exception | None = None,
         rowcount: int = 1,
         rows_by_member_id: dict[int, Sequence[tuple[object, ...]]] | None = None,
+        count_results: Sequence[int] | None = None,
     ) -> None:
         self.executed: tuple[str, dict[str, object]] | None = None
         self.executed_statements: list[tuple[str, dict[str, object]]] = []
@@ -29,8 +31,10 @@ class FakeCursor:
         self.returning_value = returning_value
         self.returning_due_date = returning_due_date
         self.returning_return_date = returning_return_date
+        self.returning_paid_date = returning_paid_date
         self.copy_status = copy_status
         self.rows_by_member_id = rows_by_member_id or {}
+        self.count_results = list(count_results or [])
         self.date_variables: list[FakeVariable] = []
         self.execute_error = execute_error
         self.rowcount = rowcount
@@ -61,6 +65,10 @@ class FakeCursor:
             self.rows = list(self.rows_by_member_id.get(member_id, self.rows))
         if "UPDATE loans" in statement:
             self.date_variables[-1].value = self.returning_return_date
+        if "UPDATE fines" in statement:
+            self.date_variables[-1].value = self.returning_paid_date
+        if "SELECT COUNT(*) FROM fines" in statement and self.count_results:
+            self.fetchone_result = (self.count_results.pop(0),)
         if "SELECT copy_status" in statement:
             self.fetchone_result = (self.copy_status,)
 
@@ -88,10 +96,12 @@ class FakeConnection:
         returning_value: int = 1,
         returning_due_date: date = date(2026, 10, 3),
         returning_return_date: date = date(2026, 9, 19),
+        returning_paid_date: date = date(2026, 9, 20),
         copy_status: str = "AVAILABLE",
         execute_error: Exception | None = None,
         rowcount: int = 1,
         rows_by_member_id: dict[int, Sequence[tuple[object, ...]]] | None = None,
+        count_results: Sequence[int] | None = None,
     ) -> None:
         self.cursor_instance = FakeCursor(
             rows,
@@ -99,10 +109,12 @@ class FakeConnection:
             returning_value,
             returning_due_date,
             returning_return_date,
+            returning_paid_date,
             copy_status,
             execute_error,
             rowcount,
             rows_by_member_id,
+            count_results,
         )
         self.commits = 0
 

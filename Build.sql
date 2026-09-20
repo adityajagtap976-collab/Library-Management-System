@@ -100,6 +100,9 @@ SHOW ERRORS TRIGGER trg_publishers_normalize_identity;
 @@db/Triggers/11_trg_prevent_suspended_loan.sql
 SHOW ERRORS TRIGGER trg_prevent_suspended_loan;
 
+@@db/Triggers/12_trg_fine_reactivate_member.sql
+SHOW ERRORS TRIGGER trg_fine_reactivate_member;
+
 commit;
 
 pro    ============================================
