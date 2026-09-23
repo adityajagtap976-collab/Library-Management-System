@@ -24,6 +24,7 @@ class FakeCursor:
         rows_by_member_id: dict[int, Sequence[tuple[object, ...]]] | None = None,
         count_results: Sequence[int] | None = None,
         member_profiles: dict[int, tuple[object, ...]] | None = None,
+        member_password_hashes: dict[int, str] | None = None,
     ) -> None:
         self.executed: tuple[str, dict[str, object]] | None = None
         self.executed_statements: list[tuple[str, dict[str, object]]] = []
@@ -37,6 +38,7 @@ class FakeCursor:
         self.rows_by_member_id = rows_by_member_id or {}
         self.count_results = list(count_results or [])
         self.member_profiles = member_profiles or {}
+        self.member_password_hashes = member_password_hashes or {}
         self.date_variables: list[FakeVariable] = []
         self.execute_error = execute_error
         self.rowcount = rowcount
@@ -68,6 +70,13 @@ class FakeCursor:
         if "SELECT member_id," in statement and "first_name" in statement:
             member_id = cast(int, parameters["member_id"])
             self.fetchone_result = self.member_profiles.get(member_id)
+        if "SELECT password_hash" in statement:
+            member_id = cast(int, parameters["member_id"])
+            self.fetchone_result = (
+                (self.member_password_hashes[member_id],)
+                if member_id in self.member_password_hashes
+                else None
+            )
         if "SET first_name = :first_name" in statement:
             member_id = cast(int, parameters["member_id"])
             profile = self.member_profiles.get(member_id)
@@ -120,6 +129,7 @@ class FakeConnection:
         rows_by_member_id: dict[int, Sequence[tuple[object, ...]]] | None = None,
         count_results: Sequence[int] | None = None,
         member_profiles: dict[int, tuple[object, ...]] | None = None,
+        member_password_hashes: dict[int, str] | None = None,
     ) -> None:
         self.cursor_instance = FakeCursor(
             rows,
@@ -134,6 +144,7 @@ class FakeConnection:
             rows_by_member_id,
             count_results,
             member_profiles,
+            member_password_hashes,
         )
         self.commits = 0
 

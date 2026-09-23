@@ -3,10 +3,11 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from lms_api.core.dependencies import Principal, require_role
+from lms_api.core.security import hash_password, verify_password
 from lms_api.db.session import get_connection
 from lms_api.models.fines import FineHistoryEntry, PaginatedFines
 from lms_api.models.loans import LoanHistoryEntry, PaginatedLoanHistory
-from lms_api.models.members import MemberContactUpdate, MemberProfile
+from lms_api.models.members import MemberContactUpdate, MemberProfile, PasswordChange
 from lms_api.models.reservations import (
     PaginatedReservations,
     ReservationHistoryEntry,
@@ -15,7 +16,9 @@ from lms_api.repositories.fines import count_fines_for_member, list_fines_for_me
 from lms_api.repositories.loans import count_loans_for_member, list_loans_for_member
 from lms_api.repositories.members import (
     get_member_by_id,
+    get_member_password_hash,
     update_member_contact_info,
+    update_member_password_hash,
 )
 from lms_api.repositories.reservations import (
     count_reservations_for_member,
@@ -64,6 +67,26 @@ async def update_my_member_profile(
             detail="Member profile could not be updated",
         )
     return MemberProfile(**await _require_member(connection, member_id))
+
+
+@router.patch("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_my_password(
+    passwords: PasswordChange,
+    principal: Principal = Depends(require_role("member")),
+    connection: Any = Depends(get_connection),
+) -> None:
+    member_id = int(cast(str, principal["sub"]))
+    stored_hash = await get_member_password_hash(connection, member_id)
+    if stored_hash is None or not verify_password(
+        passwords.current_password, stored_hash
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Current password is incorrect",
+        )
+    await update_member_password_hash(
+        connection, member_id, hash_password(passwords.new_password)
+    )
 
 
 @router.get("/{member_id}", response_model=MemberProfile)

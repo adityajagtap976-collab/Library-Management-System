@@ -2,8 +2,10 @@ from collections.abc import AsyncIterator, Callable, Sequence
 
 import httpx
 import pytest
+from lms_api.core import security
 from lms_api.db.session import get_connection
 from lms_api.main import app
+from lms_api.routers import members as members_router
 
 from tests.test_auth import FakeConnection
 from tests.test_catalog import _authorization
@@ -19,12 +21,14 @@ def _member_connection(
     member_profile: tuple[object, ...] | None = MEMBER_PROFILE,
     rows_by_member_id: dict[int, Sequence[tuple[object, ...]]] | None = None,
     count_results: Sequence[int] | None = None,
+    member_password_hashes: dict[int, str] | None = None,
 ) -> Callable[[], AsyncIterator[FakeConnection]]:
     async def override() -> AsyncIterator[FakeConnection]:
         yield FakeConnection(
             member_profiles={7: member_profile} if member_profile else {},
             rows_by_member_id=rows_by_member_id,
             count_results=count_results,
+            member_password_hashes=member_password_hashes,
         )
 
     return override
@@ -129,19 +133,37 @@ async def test_staff_can_get_member_subresource(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "path",
-    ["/members/7", "/members/7/loans", "/members/7/reservations", "/members/7/fines"],
+    ("method", "path"),
+    [
+        ("get", "/members/7"),
+        ("get", "/members/7/loans"),
+        ("get", "/members/7/reservations"),
+        ("get", "/members/7/fines"),
+        ("patch", "/members/me/password"),
+    ],
 )
-async def test_member_token_cannot_access_staff_member_endpoints(path: str) -> None:
+async def test_member_token_cannot_access_staff_member_endpoints(
+    method: str, path: str
+) -> None:
     app.dependency_overrides[get_connection] = _member_connection()
     try:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.get(
-                path,
-                headers={"Authorization": _member_authorization(7)},
-            )
+            if method == "get":
+                response = await client.get(
+                    path,
+                    headers={"Authorization": _member_authorization(7)},
+                )
+            else:
+                response = await client.patch(
+                    path,
+                    json={
+                        "current_password": "current-password",
+                        "new_password": "new-password",
+                    },
+                    headers={"Authorization": _member_authorization(7)},
+                )
     finally:
         app.dependency_overrides.clear()
 
@@ -254,3 +276,119 @@ async def test_staff_cannot_access_member_self_profile(method: str) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_member_can_change_password_and_new_hash_is_used(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_hash = security.hash_password("current-password")
+    captured: dict[str, object] = {}
+
+    async def update_password(
+        _connection: object, member_id: int, password_hash: str
+    ) -> None:
+        captured["member_id"] = member_id
+        captured["password_hash"] = password_hash
+
+    monkeypatch.setattr(members_router, "update_member_password_hash", update_password)
+    app.dependency_overrides[get_connection] = _member_connection(
+        member_password_hashes={7: original_hash}
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/members/me/password",
+                json={
+                    "current_password": "current-password",
+                    "new_password": "new-password",
+                },
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 204
+    assert captured["member_id"] == 7
+    new_hash = str(captured["password_hash"])
+    assert new_hash != original_hash
+    assert security.verify_password("new-password", new_hash)
+
+
+@pytest.mark.anyio
+async def test_wrong_current_password_does_not_update_hash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_hash = security.hash_password("current-password")
+    update_called = False
+
+    async def update_password(
+        _connection: object, _member_id: int, _password_hash: str
+    ) -> None:
+        nonlocal update_called
+        update_called = True
+
+    monkeypatch.setattr(members_router, "update_member_password_hash", update_password)
+    app.dependency_overrides[get_connection] = _member_connection(
+        member_password_hashes={7: original_hash}
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/members/me/password",
+                json={
+                    "current_password": "wrong-password",
+                    "new_password": "new-password",
+                },
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Current password is incorrect"
+    assert not update_called
+
+
+@pytest.mark.anyio
+async def test_password_change_rejects_short_new_password() -> None:
+    app.dependency_overrides[get_connection] = _member_connection()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/members/me/password",
+                json={"current_password": "current-password", "new_password": "short"},
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_password_change_rejects_member_id_field() -> None:
+    app.dependency_overrides[get_connection] = _member_connection()
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.patch(
+                "/members/me/password",
+                json={
+                    "member_id": 999,
+                    "current_password": "current-password",
+                    "new_password": "new-password",
+                },
+                headers={"Authorization": _member_authorization(7)},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422

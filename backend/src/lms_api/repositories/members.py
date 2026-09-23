@@ -52,6 +52,23 @@ async def get_member_by_id(connection: Any, member_id: int) -> dict[str, Any] | 
         await cursor.close()
 
 
+async def get_member_password_hash(connection: Any, member_id: int) -> str | None:
+    cursor = await connection.cursor()
+    try:
+        await cursor.execute(
+            """
+            SELECT password_hash
+            FROM members
+            WHERE member_id = :member_id
+            """,
+            member_id=member_id,
+        )
+        row = await cursor.fetchone()
+        return None if row is None else str(row[0])
+    finally:
+        await cursor.close()
+
+
 async def create_member(
     connection: Any,
     first_name: str,
