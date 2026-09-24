@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+tests
+db
+scripts
+Build.sql
+build_log.txt
+seed_demo_log.txt
+*.log
+.env
